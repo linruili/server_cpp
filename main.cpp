@@ -14,7 +14,6 @@
 #include <opencv2/imgcodecs.hpp>
 #include <dirent.h>
 #include <sys/stat.h>
-#include <hdf5_hl.h>
 
 #define SERVPORT 3333   // 服务器监听端口号
 #define BACKLOG 10  // 最大同时连接请求数
@@ -27,10 +26,12 @@ int buffToInteger(char* buffer);
 int main()
 {
     char recv_dir[256] = "../receive";
+    char img_name[256];
+    char compass_filename[256];
     remove_dir(recv_dir);
     mkdir(recv_dir, 0777);
-    
-    int imgSize = 64*48*4;
+
+    int imgSize = 640*480;
 //    if (!img.isContinuous())
 //        img = img.clone();
     uchar sockData[imgSize];
@@ -66,30 +67,43 @@ int main()
     }
 
 
-    while(1) {
+    while(1)
+    {
         sin_size = sizeof(struct sockaddr_in);
-        if((client_fd = accept(sock_fd, (struct sockaddr *)&remote_addr, (socklen_t*)&sin_size)) == -1) {
+        if((client_fd = accept(sock_fd, (struct sockaddr *)&remote_addr, (socklen_t*)&sin_size)) == -1)
+        {
             perror("accept出错");
             continue;
         }
         printf("received a connection from %s:%u\n", inet_ntoa(remote_addr.sin_addr), ntohs(remote_addr.sin_port));
 
 
-        int frame_count = 1;
+        sprintf(compass_filename, "%s/compass.txt", recv_dir);
+        remove(compass_filename);
+        FILE *compass_file = fopen(compass_filename, "a");
 
+        int frame_count = 1;
         while(frame_count > 0)
         {
-            if((recvbytes=recv(client_fd, buf, MAXDATASIZE, 0)) == -1) {
+            sprintf(img_name, "%s/%03d.jpg", recv_dir, frame_count);
+            ++frame_count;
+            char rec_int[4];
+            if((recvbytes=recv(client_fd, rec_int, sizeof(int), 0)) == -1)
+            {
                 perror("recv出错！");
                 return 0;
             }
-            buf[recvbytes] = '\0';
-            compass = atof(buf);
-            cout<<compass<<endl;
-
+            imgSize = buffToInteger(rec_int);
+            cout<<"imgSize: "<<imgSize<<endl;
+            if(imgSize==0)//结束的标志
+            {
+                frame_count = 0;
+                break;
+            }
 
             int total_rec_bytes = 0;
-            for(int i=0; i<imgSize; i+=recvbytes) {
+            for(int i=0; i<imgSize; i+=recvbytes)
+            {
                 recvbytes = recv(client_fd, sockData + i, imgSize - i, 0);
                 cout<<"receive bytes:"<<recvbytes<<endl;
                 total_rec_bytes += recvbytes;
@@ -100,16 +114,26 @@ int main()
                     return 0;
                 }
             }
+            sockData[total_rec_bytes] = '\0';
             cout<<"receive total bytes:"<<total_rec_bytes<<endl;
 
-            cout<<endl;
-            cv::Mat img(64, 48, CV_8UC4);
+            vector<uchar> img_data(sockData, sockData+total_rec_bytes);
+            cv::Mat img = cv::imdecode(img_data, CV_LOAD_IMAGE_COLOR);
+            cv::imwrite(img_name, img);
+            cout<<"saved image "<<frame_count-1<<endl;
 
-            memcpy(img.data, sockData, imgSize*sizeof(uchar));
-            cv::imwrite("img.jpg", img);
-            cout<<"saved image"<<endl;
+            if((recvbytes=recv(client_fd, buf, MAXDATASIZE, 0)) == -1)
+            {
+                perror("recv出错！");
+                return 0;
+            }
+            buf[recvbytes] = '\0';
+            double compass = atof(buf);
+            cout<<"compass: "<<compass<<endl;
+            fprintf(compass_file, "%f\n", compass);
         }
 
+        fclose(compass_file);
         close(client_fd);
     }
     return 0;
@@ -191,7 +215,7 @@ void backup()
 
     //接收图片
     for(int i=0; i<imgSize; i+=recvbytes) {
-        if((recvbytes = recv(client_fd, sockData + i, imgSize - i, 0) == -1)
+        if((recvbytes = recv(client_fd, sockData + i, imgSize - i, 0) == -1))
         {
             perror("recv出错！");
             return ;
@@ -206,7 +230,7 @@ void backup()
 
     //直接读取无压缩bitmap
     for(int i=0; i<imgSize; i+=recvbytes) {
-        if((recvbytes = recv(client_fd, sockData + i, imgSize - i, 0) == -1)
+        if((recvbytes = recv(client_fd, sockData + i, imgSize - i, 0) == -1))
         {
 
             perror("recv出错！");
