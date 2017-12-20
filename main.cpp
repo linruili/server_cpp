@@ -15,7 +15,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
-#define SERVPORT 3333   // 服务器监听端口号
+#define SERVPORT 8080   // 服务器监听端口号, 原来监听过3333端口
 #define BACKLOG 10  // 最大同时连接请求数
 #define MAXDATASIZE 100
 
@@ -38,6 +38,7 @@ int main()
     char buf[MAXDATASIZE];
     double compass;
     int recvbytes;
+    int doubleSize;
 
     int sock_fd,client_fd;  // sock_fd：监听socket；client_fd：数据传输socket
     int sin_size;
@@ -120,9 +121,18 @@ int main()
             vector<uchar> img_data(sockData, sockData+total_rec_bytes);
             cv::Mat img = cv::imdecode(img_data, CV_LOAD_IMAGE_COLOR);
             cv::imwrite(img_name, img);
-            cout<<"saved image "<<frame_count-1<<endl;
+            cout<<"saved image "<<frame_count-1<<"-----------------"<<endl;
 
-            if((recvbytes=recv(client_fd, buf, MAXDATASIZE, 0)) == -1)
+            //receive compass
+            if((recvbytes=recv(client_fd, rec_int, sizeof(int), 0)) == -1)
+            {
+                perror("recv出错！");
+                return 0;
+            }
+            doubleSize = buffToInteger(rec_int);
+            cout<<"doubleSize: "<<doubleSize<<endl;
+
+            if((recvbytes=recv(client_fd, buf, doubleSize, 0)) == -1)
             {
                 perror("recv出错！");
                 return 0;
