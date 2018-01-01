@@ -78,6 +78,14 @@ int main()
         }
         printf("received a connection from %s:%u\n", inet_ntoa(remote_addr.sin_addr), ntohs(remote_addr.sin_port));
 
+        if(!fork())
+        {
+            string s = "2.333#3.44\r";
+            if(send(client_fd, (const void *)s.c_str(), s.length(), 0) == -1)
+                perror("send出错！");
+            exit(0);
+        }
+
 
         sprintf(compass_filename, "%s/compass.txt", recv_dir);
         remove(compass_filename);
@@ -110,7 +118,6 @@ int main()
                 total_rec_bytes += recvbytes;
                 if(recvbytes == -1)
                 {
-
                     perror("recv出错！");
                     return 0;
                 }
